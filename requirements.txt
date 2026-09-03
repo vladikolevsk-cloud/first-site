@@ -1,4 +1,0 @@
-Flask
-gunicorn
-requests
-flask_limiter

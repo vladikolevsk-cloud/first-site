@@ -11,16 +11,19 @@
 
     <div class="controls">
         <button id="random-btn" class="btn-gold">Рандом!</button>
-        <button id="role-btn" class="btn-gold">Роль + Шанс на победу</button>
+        <button id="role-btn" class="btn-gold">Роль</button>
     </div>
 
     <div id="hero-box"></div>
     <div id="inventory-box"></div>
 
+    <div id="verdict-result">
+        <div id="verdict-winrate">0%</div>
+        <div id="verdict-reason"></div>
+    </div>
+
     <div id="role-result">
         <div id="role-name"></div>
-        <div id="chance-value">0%</div>
-        <div id="chance-caption"></div>
     </div>
 
 <script>
@@ -31,34 +34,20 @@ const heroBox = document.getElementById("hero-box");
 const inventoryBox = document.getElementById("inventory-box");
 const randomBtn = document.getElementById("random-btn");
 
+const verdictResult = document.getElementById("verdict-result");
+const verdictWinrate = document.getElementById("verdict-winrate");
+const verdictReason = document.getElementById("verdict-reason");
+
 const roleBtn = document.getElementById("role-btn");
 const roleResult = document.getElementById("role-result");
 const roleName = document.getElementById("role-name");
-const chanceValue = document.getElementById("chance-value");
-const chanceCaption = document.getElementById("chance-caption");
 
-
-const CAPTIONS = {
-    low:  ["чувак гг походу", "Мона и по миду йти"],
-    mid:  ["Нада запотеть" , "в теории мона виграть"],
-    high: ["Бустак на миде изи вин", "халявние +40 птс" ],
-};
-
-function pickCaption(chance) {
-    let pool;
-    if (chance <= 30) pool = CAPTIONS.low;
-    else if (chance <= 65) pool = CAPTIONS.mid;
-    else pool = CAPTIONS.high;
-    return pool[Math.floor(Math.random() * pool.length)];
-}
-
-
-function animateCounter(target, durationMs) {
+function animateCounter(el, target, durationMs) {
     const start = performance.now();
     function tick(now) {
         const progress = Math.min((now - start) / durationMs, 1);
         const eased = 1 - Math.pow(1 - progress, 3);
-        chanceValue.textContent = Math.round(eased * target) + "%";
+        el.textContent = Math.round(eased * target) + "%";
         if (progress < 1) requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -83,14 +72,14 @@ function buildReel(finalSrc, pool, index) {
 
     reel.appendChild(strip);
 
-    
+  
     strip.style.transitionDuration = "0s";
     strip.style.transform = "translateY(0)";
 
     const delay = 0.5 + index * 0.18; 
     const duration = 1.1 + index * 0.15;
 
-
+ 
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             strip.style.transitionDelay = delay + "s";
@@ -110,6 +99,9 @@ function buildReel(finalSrc, pool, index) {
 
 randomBtn.addEventListener("click", () => {
     randomBtn.disabled = true;
+    verdictResult.classList.remove("show");
+    verdictReason.textContent = "";
+    verdictWinrate.textContent = "0%";
 
     fetch('/api/random')
     .then(response => response.json())
@@ -127,36 +119,64 @@ randomBtn.addEventListener("click", () => {
             if (totalMs > lastDelayMs) lastDelayMs = totalMs;
         });
 
-        setTimeout(() => { randomBtn.disabled = false; }, lastDelayMs + 100);
+
+        const verdictPromise = fetch('/api/verdict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                hero: data.hero.name,
+                items: data.inventory.map(item => item.name)
+            })
+        })
+        .then(r => r.json())
+        .catch(err => {
+            console.error("Ошибка /api/verdict:", err);
+            return { winrate: 0, reason: "Вердикт не подгрузился." };
+        });
+
+        
+        const reelsDonePromise = new Promise(resolve => setTimeout(resolve, lastDelayMs));
+
+        Promise.all([reelsDonePromise, verdictPromise]).then(([, verdict]) => {
+            verdictReason.textContent = verdict.reason || "";
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    verdictResult.classList.add("show");
+                });
+            });
+
+            animateCounter(verdictWinrate, verdict.winrate || 0, 900);
+            randomBtn.disabled = false;
+        });
+    })
+    .catch(err => {
+        console.error("Ошибка /api/random:", err);
+        randomBtn.disabled = false;
     });
 });
 
 roleBtn.addEventListener("click", () => {
     roleBtn.disabled = true;
     roleResult.classList.remove("show");
-    chanceCaption.textContent = "";
-    chanceValue.textContent = "0%";
+    roleName.textContent = "";
 
     fetch('/api/role')
     .then(response => response.json())
     .then(data => {
         roleName.textContent = data.role;
 
-        
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 roleResult.classList.add("show");
             });
         });
 
-        
-        setTimeout(() => {
-            animateCounter(data.win_chance, 900);
-            setTimeout(() => {
-                chanceCaption.textContent = pickCaption(data.win_chance);
-                roleBtn.disabled = false;
-            }, 950);
-        }, 400);
+        roleBtn.disabled = false;
+    })
+    .catch(err => {
+        console.error("Ошибка /api/role:", err);
+        roleBtn.disabled = false;
     });
 });
 </script>

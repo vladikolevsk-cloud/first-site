@@ -1,6 +1,0 @@
-Flask
-gunicorn
-requests
-flask_limiter
-google-genai
-python-dotenv

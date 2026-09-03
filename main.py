@@ -1,15 +1,23 @@
 import random
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 import json
 import requests
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from ai_verdict import get_build_verdict
 
 app = Flask(__name__)
 '[https://api.opendota.com/api/heroes](https://api.opendota.com/api/heroes)'
 ITEMS_BASE_URL = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/"
-res = requests.get('https://api.opendota.com/api/heroes')
+headers = {"User-Agent": "Mozilla/5.0 (dota-randomizer)"}
+res = requests.get('https://api.opendota.com/api/heroes', headers=headers, timeout=10)
+ 
+print("STATUS:", res.status_code)          
+print("BODY:", res.text[:300])            
+ 
+res.raise_for_status() 
 data = res.json()
+ 
 character = []
 for hero in data:
     short_name = hero['name'].replace('npc_dota_hero_', '')
@@ -108,8 +116,7 @@ limiter = Limiter(key_func=get_remote_address, app=app)
 @app.route("/api/random")
 @limiter.limit('2 per second')
 def get_random_build():
-    build_data = generate_build
-    return jsonify(build_data())
+    return jsonify(generate_build())
 
 @app.route("/api/role")
 @limiter.limit('2 per second')
@@ -120,6 +127,20 @@ def get_random_role():
         "role": role,
         "win_chance": win_chance
     })
+
+@app.route("/api/verdict", methods=["POST"])
+@limiter.limit('2 per second')
+def get_verdict():
+    data = request.get_json(force=True)
+    if not data: return jsonify({"error": "Invalid JSON data"}), 400
+    hero = data.get("hero")
+    items = data.get("items")
+
+    if not hero or not items:
+        return jsonify({"error": "Missing hero or items"}), 400
+
+    verdict = get_build_verdict(hero, items)
+    return jsonify(verdict)
 
 @app.route("/")
 def index():

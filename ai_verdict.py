@@ -36,6 +36,7 @@ def get_build_verdict(hero: str, items: list[str]) -> dict:
             ],
             response_format={"type": "json_object"},
             max_tokens=1300,
+            temperature=1.1,
         )
         result = json.loads(response.choices[0].message.content)
         return result
